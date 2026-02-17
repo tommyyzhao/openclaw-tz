@@ -5,6 +5,7 @@ import {
   resolveModelRefFromString,
   resolveConfiguredModelRef,
   buildModelAliasIndex,
+  buildAllowedModelSet,
   normalizeProviderId,
   modelKey,
 } from "./model-selection.js";
@@ -111,6 +112,57 @@ describe("model-selection", () => {
         defaultProvider: "anthropic",
       });
       expect(resolved?.ref).toEqual({ provider: "openai", model: "gpt-4" });
+    });
+  });
+
+  describe("buildAllowedModelSet", () => {
+    it("allows configured fallbacks even when absent from the catalog", () => {
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            model: {
+              primary: "anthropic/claude-opus-4-6",
+              fallbacks: ["openai-codex/gpt-5.3-codex"],
+            },
+          },
+        },
+      } as OpenClawConfig;
+
+      const allowed = buildAllowedModelSet({
+        cfg,
+        catalog: [{ provider: "anthropic", id: "claude-opus-4-6" }],
+        defaultProvider: "anthropic",
+        defaultModel: "claude-opus-4-6",
+      });
+
+      expect(allowed.allowedKeys.has("anthropic/claude-opus-4-6")).toBe(true);
+      expect(allowed.allowedKeys.has("openai-codex/gpt-5.3-codex")).toBe(true);
+    });
+
+    it("keeps configured fallbacks allowed when explicit models allowlist is present", () => {
+      const cfg: OpenClawConfig = {
+        agents: {
+          defaults: {
+            model: {
+              primary: "anthropic/claude-opus-4-6",
+              fallbacks: ["openai-codex/gpt-5.3-codex"],
+            },
+            models: {
+              "anthropic/claude-opus-4-6": {},
+            },
+          },
+        },
+      } as OpenClawConfig;
+
+      const allowed = buildAllowedModelSet({
+        cfg,
+        catalog: [{ provider: "anthropic", id: "claude-opus-4-6" }],
+        defaultProvider: "anthropic",
+        defaultModel: "claude-opus-4-6",
+      });
+
+      expect(allowed.allowAny).toBe(false);
+      expect(allowed.allowedKeys.has("openai-codex/gpt-5.3-codex")).toBe(true);
     });
   });
 

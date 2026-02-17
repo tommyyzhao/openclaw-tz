@@ -275,7 +275,36 @@ export function buildAllowedModelSet(params: {
       : undefined;
   const catalogKeys = new Set(params.catalog.map((entry) => modelKey(entry.provider, entry.id)));
 
+  // Keep configured defaults/fallbacks allowed even when they are not present
+  // in the curated model catalog (e.g., provider-specific builds).
+  const configuredDefaultKeys = (() => {
+    const keys = new Set<string>();
+    const modelConfig = params.cfg.agents?.defaults?.model;
+    const refs: string[] = [];
+    if (typeof modelConfig === "string") {
+      refs.push(modelConfig);
+    } else if (modelConfig && typeof modelConfig === "object") {
+      if (modelConfig.primary) {
+        refs.push(modelConfig.primary);
+      }
+      for (const fallback of modelConfig.fallbacks ?? []) {
+        refs.push(fallback);
+      }
+    }
+    for (const raw of refs) {
+      const parsed = parseModelRef(String(raw), params.defaultProvider);
+      if (!parsed) {
+        continue;
+      }
+      keys.add(modelKey(parsed.provider, parsed.model));
+    }
+    return keys;
+  })();
+
   if (allowAny) {
+    for (const key of configuredDefaultKeys) {
+      catalogKeys.add(key);
+    }
     if (defaultKey) {
       catalogKeys.add(defaultKey);
     }
@@ -306,6 +335,10 @@ export function buildAllowedModelSet(params: {
     }
   }
 
+  for (const key of configuredDefaultKeys) {
+    allowedKeys.add(key);
+  }
+
   if (defaultKey) {
     allowedKeys.add(defaultKey);
   }
@@ -315,6 +348,9 @@ export function buildAllowedModelSet(params: {
   );
 
   if (allowedCatalog.length === 0 && allowedKeys.size === 0) {
+    for (const key of configuredDefaultKeys) {
+      catalogKeys.add(key);
+    }
     if (defaultKey) {
       catalogKeys.add(defaultKey);
     }
